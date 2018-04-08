@@ -20,41 +20,39 @@ Supported System
 ===============
 - CentOS-6.x
 - CentOS-7.x
-- Ubuntu-12.x
-- Ubuntu-13.x
 - Ubuntu-14.x
 - Ubuntu-15.x
 - Ubuntu-16.x
 - Ubuntu-17.x
 - Debian-7.x
 - Debian-8.x
+- Debian-9.x
 
 Supported Software
 ==================
-- Apache-2.2, Apache-2.4 (Include HTTP2 module)
+- Apache-2.4 (Include HTTP/2 module: mod_http2)
+- Apache Additional Modules: mod_wsgi, mod_security, mod_jk
 - MySQL-5.5, MySQL-5.6, MySQL-5.7, MariaDB-5.5, MariaDB-10.0, MariaDB-10.1, MariaDB-10.2, Percona-Server-5.5, Percona-Server-5.6, Percona-Server-5.7
-- PHP-5.3, PHP-5.4, PHP-5.5, PHP-5.6, PHP-7.0, PHP-7.1
-- PHP Additional Modules: ZendOpcache, ZendGuardLoader, ionCube Loader, XCache, Imagemagick, GraphicsMagick, Memcache, Memcached, Redis, Mongodb, Swoole, Xdebug
-- Other Software: Memcached, phpMyAdmin, Redis-Server
+- PHP-5.6, PHP-7.0, PHP-7.1, PHP-7.2
+- PHP Additional Modules: opcache, ioncube_loaders, xcache, imagick, gmagick, libsodium, memcached, redis, mongodb, swoole, xdebug
+- Other Software: ImageMagick, GraphicsMagick, Memcached, phpMyAdmin, Redis-Server
 
 Installation
 ============
-If your server system: CentOS
+- If your server system: CentOS
 ```bash
-yum -y install wget screen unzip
-wget --no-check-certificate -O lamp.zip https://github.com/teddysun/lamp/archive/master.zip
-unzip lamp.zip
-cd lamp-master
+yum -y install wget screen git
+git clone https://github.com/teddysun/lamp.git
+cd lamp
 chmod +x *.sh
 screen -S lamp
 ./lamp.sh
 ```
-If your server system: Debian/Ubuntu
+- If your server system: Debian/Ubuntu
 ```bash
-apt-get -y install wget screen unzip
-wget --no-check-certificate -O lamp.zip https://github.com/teddysun/lamp/archive/master.zip
-unzip lamp.zip
-cd lamp-master
+apt-get -y install wget screen git
+git clone https://github.com/teddysun/lamp.git
+cd lamp
 chmod +x *.sh
 screen -S lamp
 ./lamp.sh
@@ -63,6 +61,8 @@ screen -S lamp
 Upgrade
 =======
 ```bash
+git pull                 // Get latest version
+
 ./upgrade.sh             // Select one to upgrade
 ./upgrade.sh apache      // Upgrade Apache
 ./upgrade.sh db          // Upgrade MySQL/MariaDB/Percona
@@ -97,7 +97,9 @@ Default Location
 | Web root location          | /data/www/default                              |
 | Main Configuration File    | /usr/local/apache/conf/httpd.conf              |
 | Default Virtual Host conf  | /usr/local/apache/conf/extra/httpd-vhosts.conf |
-| Virtual Host location      | /usr/local/apache/conf/vhost/                  |
+| Virtual Host location      | /data/www/virtual_host_names                   |
+| Virtual Host log location  | /data/wwwlog/virtual_host_names                |
+| Virtual Host conf          | /usr/local/apache/conf/vhost/virtual_host.conf |
 
 | PHP Location               | Path                                           |
 |----------------------------|------------------------------------------------|
@@ -151,6 +153,6 @@ Support(Chinese): https://lamp.sh/support.html
 
 License
 =======
-Copyright (C) 2013 - 2017 Teddysun
+Copyright (C) 2013 - 2018 Teddysun
 
 Licensed under the [GPLv3](LICENSE) License.

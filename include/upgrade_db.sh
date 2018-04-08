@@ -1,4 +1,4 @@
-# Copyright (C) 2014 - 2017, Teddysun <i@teddysun.com>
+# Copyright (C) 2014 - 2018, Teddysun <i@teddysun.com>
 # 
 # This file is part of the LAMP script.
 #
@@ -68,7 +68,7 @@ upgrade_db(){
         elif [ "${percona_ver}" == "5.6" ]; then
             latest_percona=`curl -s https://www.percona.com/downloads/Percona-Server-5.6/LATEST/ | grep 'selected' | head -1 | awk -F '/Percona-Server-' '/Percona-Server-5.6/{print $2}' | cut -d'"' -f1`
         elif [ "${percona_ver}" == "5.7" ]; then
-            latest_percona=`curl -s https://www.percona.com/downloads/Percona-Server-5.7/LATEST/ | grep 'selected' | head -1 | awk -F '/Percona-Server-' '/Percona-Server-5.7/{print $2}' | cut -d'"' -f1`
+            latest_percona=`curl -s https://www.percona.com/downloads/Percona-Server-LATEST/ | grep 'selected' | head -1 | awk -F '/Percona-Server-' '/Percona-Server-5.7/{print $2}' | cut -d'"' -f1`
         fi
 
         echo -e "Latest version of Percona: \033[41;37m ${latest_percona} \033[0m"
@@ -162,7 +162,7 @@ EOF
             [ ! -d ${datalocation} ] && mkdir -p ${datalocation}
 
             is_64bit && sys_bit=x86_64 || sys_bit=i686
-            url1="http://cdn.mysql.com/Downloads/MySQL-${mysql_ver}/mysql-${latest_mysql}-linux-glibc2.12-${sys_bit}.tar.gz"
+            url1="https://cdn.mysql.com/Downloads/MySQL-${mysql_ver}/mysql-${latest_mysql}-linux-glibc2.12-${sys_bit}.tar.gz"
             url2="${download_root_url}/mysql-${latest_mysql}-linux-glibc2.12-${sys_bit}.tar.gz"
 
             download_from_url "mysql-${latest_mysql}-linux-glibc2.12-${sys_bit}.tar.gz" "${url1}" "${url2}"

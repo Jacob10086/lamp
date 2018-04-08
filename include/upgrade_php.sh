@@ -1,4 +1,4 @@
-# Copyright (C) 2014 - 2017, Teddysun <i@teddysun.com>
+# Copyright (C) 2014 - 2018, Teddysun <i@teddysun.com>
 # 
 # This file is part of the LAMP script.
 #
@@ -29,18 +29,14 @@ upgrade_php(){
     local php_extension_dir=`get_php_extension_dir "${phpConfig}"`
     local installed_php=`${php_location}/bin/php -r 'echo PHP_VERSION;' 2>/dev/null`
 
-    if   [ "${php_version}" == "5.3" ]; then
-        latest_php='5.3.29'
-    elif [ "${php_version}" == "5.4" ]; then
-        latest_php='5.4.45'
-    elif [ "${php_version}" == "5.5" ]; then
-        latest_php='5.5.38'
-    elif [ "${php_version}" == "5.6" ]; then
-        latest_php='5.6.30'
+    if [ "${php_version}" == "5.6" ]; then
+        latest_php=$(curl -s http://php.net/downloads.php | awk '/Changelog/{print $2}' | grep '5.6')
     elif [ "${php_version}" == "7.0" ]; then
         latest_php=$(curl -s http://php.net/downloads.php | awk '/Changelog/{print $2}' | grep '7.0')
     elif [ "${php_version}" == "7.1" ]; then
         latest_php=$(curl -s http://php.net/downloads.php | awk '/Changelog/{print $2}' | grep '7.1')
+    elif [ "${php_version}" == "7.2" ]; then
+        latest_php=$(curl -s http://php.net/downloads.php | awk '/Changelog/{print $2}' | grep '7.2')
     fi
 
     echo -e "Latest version of PHP: \033[41;37m ${latest_php} \033[0m"
@@ -59,13 +55,6 @@ upgrade_php(){
     char=`get_char`
 
     if [[ "${upgrade_php}" = "y" || "${upgrade_php}" = "Y" ]]; then
-
-        if [ "${php_version}" != "7.0" ] && [ "${php_version}" != "7.1" ]; then
-            if [ "${installed_php}" == "${latest_php}" ]; then
-                echo "${installed_php} is already the latest version and not need to upgrade, nothing to do..."
-                exit
-            fi
-        fi
 
         log "Info" "PHP upgrade start..."
         if [[ -d ${php_location}.bak && -d ${php_location} ]]; then
@@ -87,34 +76,32 @@ upgrade_php(){
             cd php-${latest_php}/
         fi
 
-        if [ -d ${mariadb_location} ]; then
-            if [[ "${php_version}" == "7.0" || "${php_version}" == "7.1" ]]; then
-                with_mysql="--with-mysqli=${mariadb_location}/bin/mysql_config --with-mysql-sock=/tmp/mysql.sock"
+        if [ -d ${mariadb_location} ] || [ -d ${mysql_location} ] || [ -d ${percona_location} ]; then
+            if [[ "${php_version}" == "7.0" || "${php_version}" == "7.1" || "${php_version}" == "7.2" ]]; then
+                with_mysql="--enable-mysqlnd --with-mysqli=mysqlnd --with-mysql-sock=/tmp/mysql.sock --with-pdo-mysql=mysqlnd"
             else
-                with_mysql="--with-mysql=${mariadb_location} --with-mysqli=${mariadb_location}/bin/mysql_config --with-mysql-sock=/tmp/mysql.sock"
-            fi
-        elif [ -d ${mysql_location} ]; then
-            if [[ "${php_version}" == "7.0" || "${php_version}" == "7.1" ]]; then
-                with_mysql="--with-mysqli=${mysql_location}/bin/mysql_config --with-mysql-sock=/tmp/mysql.sock"
-            else
-                with_mysql="--with-mysql=${mysql_location} --with-mysqli=${mysql_location}/bin/mysql_config --with-mysql-sock=/tmp/mysql.sock"
-            fi
-        elif [ -d ${percona_location} ]; then
-            if [[ "${php_version}" == "7.0" || "${php_version}" == "7.1" ]]; then
-                with_mysql="--with-mysqli=${percona_location}/bin/mysql_config --with-mysql-sock=/tmp/mysql.sock"
-            else
-                with_mysql="--with-mysql=${percona_location} --with-mysqli=${percona_location}/bin/mysql_config --with-mysql-sock=/tmp/mysql.sock"
+                with_mysql="--enable-mysqlnd --with-mysql=mysqlnd --with-mysqli=mysqlnd --with-mysql-sock=/tmp/mysql.sock --with-pdo-mysql=mysqlnd"
             fi
         else
             with_mysql=""
         fi
 
-        if [[ "${php_version}" == "7.0" || "${php_version}" == "7.1" ]]; then
+        if [[ "${php_version}" == "7.0" || "${php_version}" == "7.1"  || "${php_version}" == "7.2" ]]; then
             with_gd="--with-gd --with-webp-dir --with-jpeg-dir --with-png-dir --with-xpm-dir --with-freetype-dir"
-        elif [[ "${php_version}" == "5.4" || "${php_version}" == "5.5" || "${php_version}" == "5.6" ]]; then
+        elif [[ "${php_version}" == "5.6" ]]; then
             with_gd="--with-gd --with-vpx-dir --with-jpeg-dir --with-png-dir --with-xpm-dir --with-freetype-dir"
+        fi
+
+        if [[ "${php_version}" == "7.2" ]]; then
+            other_options="--enable-zend-test"
         else
-            with_gd="--with-gd --with-jpeg-dir --with-png-dir --with-xpm-dir --with-freetype-dir"
+            other_options="--with-mcrypt --enable-gd-native-ttf"
+        fi
+
+        if check_sys packageManager yum; then
+            with_imap="--with-imap=${depends_prefix}/imap"
+        elif check_sys packageManager apt; then
+            with_imap="--with-imap --with-kerberos"
         fi
 
         is_64bit && with_libdir="--with-libdir=lib64" || with_libdir=""
@@ -124,7 +111,7 @@ upgrade_php(){
         --with-config-file-path=${php_location}/etc \
         --with-config-file-scan-dir=${php_location}/php.d \
         --with-pcre-dir=${depends_prefix}/pcre \
-        --with-imap=${depends_prefix}/imap \
+        ${with_imap} \
         --with-imap-ssl \
         --with-libxml-dir \
         --with-openssl \
@@ -143,7 +130,6 @@ upgrade_php(){
         --with-ldap-sasl \
         --with-libmbfl \
         --with-onig \
-        --with-mcrypt \
         --with-unixODBC \
         --with-pspell=/usr \
         --with-enchant=/usr \
@@ -152,12 +138,12 @@ upgrade_php(){
         --with-xmlrpc \
         --with-xsl \
         --without-pear \
+        ${other_options} \
         --enable-bcmath \
         --enable-calendar \
         --enable-dba \
         --enable-exif \
         --enable-ftp \
-        --enable-gd-native-ttf \
         --enable-gd-jis-conv \
         --enable-intl \
         --enable-mbstring \
@@ -167,20 +153,15 @@ upgrade_php(){
         --enable-sockets \
         --enable-wddx \
         --enable-zip \
-        --enable-mysqlnd \
         ${disable_fileinfo}"
-        
+
         error_detect "./configure ${php_configure_args}"
-        if [ "${php_version}" == "7.0" ]; then
-            error_detect "parallel_make ZEND_EXTRA_LIBS='-liconv'"
-        else
-            error_detect "parallel_make"
-        fi
+        error_detect "parallel_make ZEND_EXTRA_LIBS='-liconv'"
         error_detect "make install"
 
         mkdir -p ${php_location}/{etc,php.d}
         cp -pf ${php_location}.bak/etc/php.ini ${php_location}/etc/php.ini
-        cp -pn ${php_location}.bak/lib/php/extensions/no-debug-non-zts-*/* ${php_extension_dir}/
+        cp -pn ${php_location}.bak/lib/php/extensions/no-debug-zts-*/* ${php_extension_dir}/
         if [ `ls ${php_location}.bak/php.d/ | wc -l` -gt 0 ]; then
             cp -pf ${php_location}.bak/php.d/* ${php_location}/php.d/
         fi

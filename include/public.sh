@@ -1,4 +1,4 @@
-# Copyright (C) 2014 - 2017, Teddysun <i@teddysun.com>
+# Copyright (C) 2014 - 2018, Teddysun <i@teddysun.com>
 # 
 # This file is part of the LAMP script.
 #
@@ -595,14 +595,14 @@ untar(){
         wget -c -t3 -T3 ${1} -P ${cur_dir}/
         if [ $? -ne 0 ]; then
             rm -rf ${cur_dir}/${software_name}
-            wget -c -t3 -T60 ${2} -P ${cur_dir}/
+            wget -cv -t3 -T60 ${2} -P ${cur_dir}/
             software_name=`echo ${2} | awk -F/ '{print $NF}'`
             tarball_type=`echo ${2} | awk -F. '{print $NF}'`
         fi
     else
         software_name=`echo ${2} | awk -F/ '{print $NF}'`
         tarball_type=`echo ${2} | awk -F. '{print $NF}'`
-        wget -c -t3 -T3 ${2} -P ${cur_dir}/ || exit
+        wget -cv -t3 -T3 ${2} -P ${cur_dir}/ || exit
     fi
     extracted_dir=`tar tf ${cur_dir}/${software_name} | tail -n 1 | awk -F/ '{print $1}'`
     case ${tarball_type} in
@@ -745,7 +745,7 @@ download_file(){
         log "Info" "${1} [found]"
     else
         log "Info" "${1} not found, download now..."
-        wget -cq -t3 -T60 ${url}
+        wget --no-check-certificate -cv -t3 -T60 ${url}
         if [ $? -eq 0 ]; then
             log "Info" "${1} download completed..."
         else
@@ -762,13 +762,13 @@ download_from_url(){
         log "Info" "${filename} [found]"
     else
         log "Info" "${filename} not found, download now..."
-        wget -cq -t3 -T3 ${2}
+        wget -cv -t3 -T3 ${2}
         if [ $? -eq 0 ]; then
             log "Info" "${filename} download completed..."
         else
             rm -f ${filename}
             log "Info" "${filename} download failed, retrying download from backup site..."
-            wget -cq -t3 -T60 ${3}
+            wget -cv -t3 -T60 ${3}
             if [ $? -eq 0 ]; then
                 log "Info" "${filename} download completed..."
             else
@@ -891,6 +891,14 @@ last_confirm(){
     echo "Apache: ${apache}"
     [ "${apache}" != "do_not_install" ] && echo "Apache Location: ${apache_location}"
     echo
+    if [ "${apache_modules_install}" != "do_not_install" ]; then
+        echo "Apache Additional Modules:"
+        for a in ${apache_modules_install[@]}
+        do
+            echo "${a}"
+        done
+    fi
+    echo
     if echo "${mysql}" | grep -qi "mysql"; then
         echo "MySQL: ${mysql}"
         echo "MySQL Location: ${mysql_location}"
@@ -934,9 +942,7 @@ last_confirm(){
     StartDateSecond=$(date +%s)
     log "Info" "Start time: ${StartDate}"
 
-    if [ -d ${cur_dir}/software ]; then
-        rm -rf ${cur_dir}/software/*
-    else
+    if [ ! -d ${cur_dir}/software ]; then
         mkdir -p ${cur_dir}/software
     fi
 
@@ -963,6 +969,8 @@ finally(){
     if [ "${apache}" != "do_not_install" ]; then
         echo "Apache Location: ${apache_location}"
     fi
+    echo
+    echo "Apache Modules: ${apache_modules_install}"
     echo
     if [ -d ${mysql_location} ]; then
         echo "MySQL Server: ${mysql}"
@@ -1003,6 +1011,18 @@ finally(){
     sed -i "s@^mysql_location=.*@mysql_location=${mysql_location}@" /usr/bin/lamp
     sed -i "s@^mariadb_location=.*@mariadb_location=${mariadb_location}@" /usr/bin/lamp
     sed -i "s@^percona_location=.*@percona_location=${percona_location}@" /usr/bin/lamp
+    sed -i "s@^web_root_dir=.*@web_root_dir=${web_root_dir}@" /usr/bin/lamp
+
+    ldconfig
+
+    # Add phpmyadmin Alias
+    if [ -d "${web_root_dir}/phpmyadmin" ]; then
+        cat >> ${apache_location}/conf/httpd.conf <<EOF
+<IfModule alias_module>
+    Alias /phpmyadmin ${web_root_dir}/phpmyadmin
+</IfModule>
+EOF
+    fi
 
     if [ "${apache}" != "do_not_install" ]; then
         echo "Starting Apache..."
@@ -1012,26 +1032,22 @@ finally(){
         echo "Starting Database..."
         /etc/init.d/mysqld start > /dev/null 2>&1
     fi
-    if if_in_array "${php_memcached_filename}" "${php_modules_install}"; then
-        echo "Starting Memcached..." 
+
+    if if_in_array "${php_memcached_filename}" "${php_modules_install}" || if_in_array "${php_memcached_filename2}" "${php_modules_install}"; then
+        echo "Starting Memcached..."
         /etc/init.d/memcached start > /dev/null 2>&1
     fi
-    if [[ "${php}" == "${php7_0_filename}" || "$php" == "${php7_1_filename}" ]]; then
-        if if_in_array "${php_redis_filename2}" "${php_modules_install}"; then
-            echo "Starting Redis-server..."
-            /etc/init.d/redis-server start > /dev/null 2>&1
-        fi
-    else
-        if if_in_array "${php_redis_filename}" "${php_modules_install}"; then
-            echo "Starting Redis-server..."
-            /etc/init.d/redis-server start > /dev/null 2>&1
-        fi
+
+    if if_in_array "${php_redis_filename}" "${php_modules_install}" || if_in_array "${php_redis_filename2}" "${php_modules_install}"; then
+        echo "Starting Redis-server..."
+        /etc/init.d/redis-server start > /dev/null 2>&1
     fi
 
     # Install phpmyadmin database
-    if [ -d "${web_root_dir}/phpmyadmin" ]; then
+    if [ -d "${web_root_dir}/phpmyadmin" ] && [ -f /usr/bin/mysql ]; then
         /usr/bin/mysql -uroot -p${dbrootpwd} < ${web_root_dir}/phpmyadmin/sql/create_tables.sql > /dev/null 2>&1
     fi
+
     sleep 3
     netstat -nxtlp
 
@@ -1046,13 +1062,15 @@ finally(){
 
 #Install tools
 install_tool(){
-    log "Info" "Starting to install tools..."
+    log "Info" "Starting to install development tools..."
     if check_sys packageManager apt; then
-        apt-get -y install gcc g++ make wget perl curl bzip2 libreadline-dev net-tools python python-dev > /dev/null 2>&1
+        apt-get -y update > /dev/null 2>&1
+        apt-get -y install gcc g++ make wget perl curl bzip2 libreadline-dev net-tools python python-dev cron ca-certificates > /dev/null 2>&1
     elif check_sys packageManager yum; then
-        yum -y install gcc gcc-c++ make wget perl curl bzip2 readline readline-devel net-tools python python-devel > /dev/null 2>&1
+        yum install -y yum-utils epel-release gcc gcc-c++ make wget perl curl bzip2 readline readline-devel net-tools python python-devel crontabs ca-certificates > /dev/null 2>&1
+        yum-config-manager --enable epel > /dev/null 2>&1
     fi
-    log "Info" "Install tools completed..."
+    log "Info" "Install development tools completed..."
 
     check_command_exist "gcc"
     check_command_exist "g++"
@@ -1070,6 +1088,7 @@ install_lamp(){
     remove_packages
 
     [ "${apache}" != "do_not_install" ] && check_installed "install_apache" "${apache_location}"
+    [ "${apache_modules_install}" != "do_not_install" ] && install_apache_modules
     if echo "${mysql}" | grep -qi "mysql"; then
         check_installed "install_mysqld" "${mysql_location}"
     elif echo "${mysql}" | grep -qi "mariadb"; then
@@ -1100,13 +1119,13 @@ pre_setting(){
     if check_sys packageManager yum || check_sys packageManager apt; then
         # Not support CentOS 5 & Debian 6
         if centosversion 5 || debianversion 6; then
-            log "Error" "Not supported OS, please change to CentOS 6+ or Debian 7+ or Ubuntu 12+ and try again."
+            log "Error" "Not supported OS, please change to CentOS 6+ or Debian 7+ or Ubuntu 14+ and try again."
             exit 1
         fi
         preinstall_lamp
         install_lamp
     else
-        log "Error" "Not supported OS, please change to CentOS 6+ or Debian 7+ or Ubuntu 12+ and try again."
+        log "Error" "Not supported OS, please change to CentOS 6+ or Debian 7+ or Ubuntu 14+ and try again."
         exit 1
     fi
 }
