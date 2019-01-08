@@ -1,4 +1,4 @@
-# Copyright (C) 2014 - 2018, Teddysun <i@teddysun.com>
+# Copyright (C) 2013 - 2019 Teddysun <i@teddysun.com>
 # 
 # This file is part of the LAMP script.
 #
@@ -17,37 +17,37 @@ php_preinstall_settings(){
     if [[ "${apache}" == "do_not_install" ]]; then
         php="do_not_install"
     else
-        display_menu php 1
+        display_menu php 4
     fi
 
     if [ "${php}" != "do_not_install" ]; then
 
         if [ "${mysql}" != "do_not_install" ]; then
-            if [[ "${php}" == "${php7_0_filename}" || "${php}" == "${php7_1_filename}" || "${php}" == "${php7_2_filename}" ]]; then
-                with_mysql="--enable-mysqlnd --with-mysqli=mysqlnd --with-mysql-sock=/tmp/mysql.sock --with-pdo-mysql=mysqlnd"
-            else
+            if [ "${php}" == "${php5_6_filename}" ]; then
                 with_mysql="--enable-mysqlnd --with-mysql=mysqlnd --with-mysqli=mysqlnd --with-mysql-sock=/tmp/mysql.sock --with-pdo-mysql=mysqlnd"
+            else
+                with_mysql="--enable-mysqlnd --with-mysqli=mysqlnd --with-mysql-sock=/tmp/mysql.sock --with-pdo-mysql=mysqlnd"
             fi
         else
             with_mysql=""
         fi
 
-        if [[ "${php}" == "${php7_0_filename}" || "${php}" == "${php7_1_filename}" || "${php}" == "${php7_2_filename}" ]]; then
-            with_gd="--with-gd --with-webp-dir --with-jpeg-dir --with-png-dir --with-xpm-dir --with-freetype-dir"
-        elif [[ "${php}" == "${php5_6_filename}" ]]; then
+        if [ "${php}" == "${php5_6_filename}" ]; then
             with_gd="--with-gd --with-vpx-dir --with-jpeg-dir --with-png-dir --with-xpm-dir --with-freetype-dir"
+        else
+            with_gd="--with-gd --with-webp-dir --with-jpeg-dir --with-png-dir --with-xpm-dir --with-freetype-dir"
         fi
 
-        if [[ "${php}" == "${php7_2_filename}" ]]; then
+        if [[ "${php}" == "${php7_2_filename}" || "${php}" == "${php7_3_filename}" ]]; then
             other_options="--enable-zend-test"
         else
             other_options="--with-mcrypt --enable-gd-native-ttf"
         fi
 
-        if check_sys packageManager yum; then
-            with_imap="--with-imap=${depends_prefix}/imap"
-        elif check_sys packageManager apt; then
-            with_imap="--with-imap --with-kerberos"
+        if [ "${php}" == "${php7_3_filename}" ]; then
+            with_libmbfl=""
+        else
+            with_libmbfl="--with-libmbfl"
         fi
 
         is_64bit && with_libdir="--with-libdir=lib64" || with_libdir=""
@@ -57,7 +57,8 @@ php_preinstall_settings(){
         --with-config-file-path=${php_location}/etc \
         --with-config-file-scan-dir=${php_location}/php.d \
         --with-pcre-dir=${depends_prefix}/pcre \
-        ${with_imap} \
+        --with-imap \
+        --with-kerberos \
         --with-imap-ssl \
         --with-libxml-dir \
         --with-openssl \
@@ -74,7 +75,7 @@ php_preinstall_settings(){
         --with-icu-dir=/usr \
         --with-ldap \
         --with-ldap-sasl \
-        --with-libmbfl \
+        ${with_libmbfl} \
         --with-onig \
         --with-unixODBC \
         --with-pspell=/usr \
@@ -114,28 +115,28 @@ install_php(){
         download_file  "${php5_6_filename}.tar.gz"
         tar zxf ${php5_6_filename}.tar.gz
         cd ${php5_6_filename}
-
     elif [ "${php}" == "${php7_0_filename}" ]; then
         download_file  "${php7_0_filename}.tar.gz"
         tar zxf ${php7_0_filename}.tar.gz
         cd ${php7_0_filename}
-
     elif [ "${php}" == "${php7_1_filename}" ]; then
         download_file  "${php7_1_filename}.tar.gz"
         tar zxf ${php7_1_filename}.tar.gz
         cd ${php7_1_filename}
-
     elif [ "${php}" == "${php7_2_filename}" ]; then
         download_file  "${php7_2_filename}.tar.gz"
         tar zxf ${php7_2_filename}.tar.gz
         cd ${php7_2_filename}
-
+    elif [ "${php}" == "${php7_3_filename}" ]; then
+        download_file  "${php7_3_filename}.tar.gz"
+        tar zxf ${php7_3_filename}.tar.gz
+        cd ${php7_3_filename}
     fi
 
     unset LD_LIBRARY_PATH
     unset CPPFLAGS
-    error_detect "./configure ${php_configure_args}"
     ldconfig
+    error_detect "./configure ${php_configure_args}"
     error_detect "parallel_make ZEND_EXTRA_LIBS='-liconv'"
     error_detect "make install"
 
@@ -153,7 +154,7 @@ config_php(){
     ln -s ${php_location}/bin/php-config /usr/bin/
     ln -s ${php_location}/bin/phpize /usr/bin/
 
-    extension_dir=`php-config --extension-dir`
+    extension_dir=$(php-config --extension-dir)
     cat > ${php_location}/php.d/opcache.ini<<-EOF
 [opcache]
 zend_extension=${extension_dir}/opcache.so

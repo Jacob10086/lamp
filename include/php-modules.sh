@@ -1,4 +1,4 @@
-# Copyright (C) 2014 - 2018, Teddysun <i@teddysun.com>
+# Copyright (C) 2013 - 2019 Teddysun <i@teddysun.com>
 # 
 # This file is part of the LAMP script.
 #
@@ -25,8 +25,10 @@ php_modules_preinstall_settings(){
         # delete some modules & change some module version
         if [[ "${php}" == "${php5_6_filename}" ]]; then
             php_modules_arr=(${php_modules_arr[@]#${php_libsodium_filename}})
+            php_modules_arr=(${php_modules_arr[@]#${swoole_filename}})
         else
             php_modules_arr=(${php_modules_arr[@]#${xcache_filename}})
+            php_modules_arr=(${php_modules_arr[@]/#${xdebug_filename}/${xdebug_filename2}})
             php_modules_arr=(${php_modules_arr[@]/#${php_redis_filename}/${php_redis_filename2}})
             php_modules_arr=(${php_modules_arr[@]/#${php_memcached_filename}/${php_memcached_filename2}})
             php_modules_arr=(${php_modules_arr[@]/#${php_graphicsmagick_filename}/${php_graphicsmagick_filename2}})
@@ -45,6 +47,14 @@ phpmyadmin_preinstall_settings(){
     fi
 }
 
+#Pre-installation kodexplorer
+kodexplorer_preinstall_settings(){
+    if [[ "${php}" == "do_not_install" ]]; then
+        kodexplorer="do_not_install"
+    else
+        display_menu kodexplorer 1
+    fi
+}
 
 install_php_modules(){
     local phpConfig=${1}
@@ -53,12 +63,13 @@ install_php_modules(){
     if_in_array "${php_imagemagick_filename}" "${php_modules_install}" && install_php_imagesmagick "${phpConfig}"
     if_in_array "${php_mongo_filename}" "${php_modules_install}" && install_php_mongo "${phpConfig}"
     if_in_array "${swoole_filename}" "${php_modules_install}" && install_swoole "${phpConfig}"
-    if_in_array "${xdebug_filename}" "${php_modules_install}" && install_xdebug "${phpConfig}"
     if [ "${php}" == "${php5_6_filename}" ]; then
+        if_in_array "${xdebug_filename}" "${php_modules_install}" && install_xdebug "${phpConfig}"
         if_in_array "${php_graphicsmagick_filename}" "${php_modules_install}" && install_php_graphicsmagick "${phpConfig}"
         if_in_array "${php_redis_filename}" "${php_modules_install}" && install_php_redis "${phpConfig}"
         if_in_array "${php_memcached_filename}" "${php_modules_install}" && install_php_memcached "${phpConfig}"
     else
+        if_in_array "${xdebug_filename2}" "${php_modules_install}" && install_xdebug "${phpConfig}"
         if_in_array "${php_libsodium_filename}" "${php_modules_install}" && install_php_libsodium "${phpConfig}"
         if_in_array "${php_graphicsmagick_filename2}" "${php_modules_install}" && install_php_graphicsmagick "${phpConfig}"
         if_in_array "${php_redis_filename2}" "${php_modules_install}" && install_php_redis "${phpConfig}"
@@ -75,7 +86,7 @@ install_php_depends(){
             libldap-2.4-2 libldap2-dev libsasl2-dev libsasl2-modules-ldap libc-client2007e-dev libkrb5-dev
             autoconf2.13 pkg-config libxslt1-dev zlib1g-dev libpcre3-dev libtool unixodbc-dev libtidy-dev
             libjpeg-dev libpng-dev libfreetype6-dev libpspell-dev libmhash-dev libenchant-dev libmcrypt-dev
-            libcurl4-gnutls-dev libwebp-dev libxpm-dev libvpx-dev libreadline-dev snmp libsnmp-dev
+            libcurl4-gnutls-dev libwebp-dev libxpm-dev libvpx-dev libreadline-dev snmp libsnmp-dev libzip-dev
         )
         log "Info" "Starting to install dependencies packages for PHP..."
         for depend in ${apt_depends[@]}
@@ -131,12 +142,20 @@ install_php_depends(){
         do
             error_detect_depends "yum -y install ${depend}"
         done
+        if yum list | grep "libc-client-devel" > /dev/null 2>&1; then
+            error_detect_depends "yum -y install libc-client-devel"
+        elif yum list | grep "uw-imap-devel" > /dev/null 2>&1; then
+            error_detect_depends "yum -y install uw-imap-devel"
+        else
+            log "Error" "There is no rpm package libc-client-devel or uw-imap-devel, please check it and try again."
+            exit 1
+        fi
         log "Info" "Install dependencies packages for PHP completed..."
 
         install_mhash
         install_libmcrypt
         install_mcrypt
-        check_installed "install_imap" "${depends_prefix}/imap"
+        install_libzip
     fi
 
     install_libiconv
@@ -178,39 +197,6 @@ install_re2c(){
         error_detect "make install"
         log "Info" "${re2c_filename} install completed..."
     fi
-}
-
-
-install_imap(){
-    cd ${cur_dir}/software/
-    log "Info" "${imap_filename} install start..."
-    download_file "${imap_filename}.tar.gz"
-    tar zxf ${imap_filename}.tar.gz
-    cd ${imap_filename}
-
-    if [ -d ${openssl_location} ]; then
-        sed -ir "s@SSLINCLUDE=/usr/include/openssl@SSLINCLUDE=${openssl_location}/include@" Makefile
-        sed -ir "s@SSLLIB=/usr/lib@SSLLIB=${openssl_location}/lib@" Makefile
-    fi
-
-    if is_64bit; then
-        error_detect "make lr5 PASSWDTYPE=std SSLTYPE=unix.nopwd EXTRACFLAGS=-fPIC IP=4"
-    else
-        error_detect "make lr5 PASSWDTYPE=std SSLTYPE=unix.nopwd IP=4"
-    fi
-
-    mkdir -p ${depends_prefix}/imap/
-    mkdir -p ${depends_prefix}/imap/include/
-    mkdir -p ${depends_prefix}/imap/lib/
-    mkdir -p ${depends_prefix}/imap/c-client/
-    cp c-client/*.h ${depends_prefix}/imap/include/
-    cp c-client/*.c ${depends_prefix}/imap/lib/
-    cp c-client/*.c ${depends_prefix}/imap/c-client/
-    cp c-client/c-client.a ${depends_prefix}/imap/lib/libc-client.a
-    cp c-client/c-client.a ${depends_prefix}/imap/c-client/libc-client.a
-    add_to_env "${depends_prefix}/imap"
-    create_lib64_dir "${depends_prefix}/imap"
-    log "Info" "${imap_filename} install completed..."
 }
 
 
@@ -278,55 +264,70 @@ install_libmcrypt(){
     fi
 }
 
-install_nghttp2(){
-    if [ ! -e "/usr/lib/libnghttp2.a" ]; then
-        cd ${cur_dir}/software/
-        log "Info" "${nghttp2_filename} install start..."
-        download_file "${nghttp2_filename}.tar.gz"
-        tar zxf ${nghttp2_filename}.tar.gz
-        cd ${nghttp2_filename}
 
-        if [ -d ${openssl_location} ]; then
-            export OPENSSL_CFLAGS="-I${openssl_location}/include"
-            export OPENSSL_LIBS="-L${openssl_location}/lib -lssl -lcrypto"
-        fi
-        error_detect "./configure --prefix=/usr --enable-lib-only"
+install_libzip(){
+    if [ ! -e "/usr/lib/libzip.la" ]; then
+        cd ${cur_dir}/software/
+        log "Info" "${libzip_filename} install start..."
+        download_file "${libzip_filename}.tar.gz"
+        tar zxf ${libzip_filename}.tar.gz
+        cd ${libzip_filename}
+
+        error_detect "./configure --prefix=/usr"
         error_detect "parallel_make"
         error_detect "make install"
-        unset OPENSSL_CFLAGS
-        unset OPENSSL_LIBS
-        log "Info" "${nghttp2_filename} install completed..."
+        log "Info" "${libzip_filename} install completed..."
     fi
 }
 
 
-install_openssl(){
-    local openssl_version=`openssl version -v`
-    local major_version=`echo ${openssl_version} | awk '{print $2}' | grep -oE "[0-9.]+"`
+install_nghttp2(){
+    cd ${cur_dir}/software/
+    log "Info" "${nghttp2_filename} install start..."
+    download_file "${nghttp2_filename}.tar.gz"
+    tar zxf ${nghttp2_filename}.tar.gz
+    cd ${nghttp2_filename}
 
-    if version_lt ${major_version} 1.0.2; then
+    if [ -d ${openssl_location} ]; then
+        export OPENSSL_CFLAGS="-I${openssl_location}/include"
+        export OPENSSL_LIBS="-L${openssl_location}/lib -lssl -lcrypto"
+    fi
+    error_detect "./configure --prefix=/usr --enable-lib-only"
+    error_detect "parallel_make"
+    error_detect "make install"
+    unset OPENSSL_CFLAGS OPENSSL_LIBS
+    log "Info" "${nghttp2_filename} install completed..."
+}
+
+
+install_openssl(){
+    local openssl_version=$(openssl version -v)
+    local major_version=$(echo ${openssl_version} | awk '{print $2}' | grep -oE "[0-9.]+")
+
+    if version_lt ${major_version} 1.1.1; then
         cd ${cur_dir}/software/
         log "Info" "${openssl_filename} install start..."
         download_file "${openssl_filename}.tar.gz"
         tar zxf ${openssl_filename}.tar.gz
         cd ${openssl_filename}
 
-        error_detect "./config --prefix=${openssl_location} -fPIC shared no-ssl2 zlib-dynamic"
+        error_detect "./config --prefix=${openssl_location} -fPIC shared zlib"
         error_detect "make"
         error_detect "make install"
 
-        ln -s ${openssl_location}/lib/libssl.so.1.0.0 /usr/local/lib/
-        ln -s ${openssl_location}/lib/libcrypto.so.1.0.0 /usr/local/lib/
-        create_lib64_dir "${openssl_location}"
+        if ! grep -qE "^${openssl_location}/lib" /etc/ld.so.conf.d/*.conf; then
+            echo "${openssl_location}/lib" > /etc/ld.so.conf.d/openssl.conf
+        fi
+        ldconfig
         log "Info" "${openssl_filename} install completed..."
     else
-        log "Info" "OpenSSL version is greater than or equal to 1.0.2, skipped the installation."
+        log "Info" "OpenSSL version is greater than or equal to 1.1.1, installation skipped."
     fi
 }
 
 
 install_phpmyadmin(){
-    if [ -d ${web_root_dir}/phpmyadmin ];then
+    if [ -d "${web_root_dir}/phpmyadmin" ]; then
         rm -rf ${web_root_dir}/phpmyadmin
     fi
 
@@ -336,27 +337,46 @@ install_phpmyadmin(){
     download_file "${phpmyadmin}.tar.gz"
     tar zxf ${phpmyadmin}.tar.gz
     mv ${phpmyadmin} ${web_root_dir}/phpmyadmin
-    cp -f ${cur_dir}/conf/config.inc_new.php ${web_root_dir}/phpmyadmin/config.inc.php
+    cp -f ${cur_dir}/conf/config.inc.php ${web_root_dir}/phpmyadmin/config.inc.php
     mkdir -p ${web_root_dir}/phpmyadmin/{upload,save}
     chown -R apache:apache ${web_root_dir}/phpmyadmin
     log "Info" "${phpmyadmin} install completed..."
 }
 
 
+install_kodexplorer(){
+    if [ -d "${web_root_dir}/kod" ]; then
+        rm -rf ${web_root_dir}/kod
+    fi
+
+    cd ${cur_dir}/software
+
+    log "Info" "${kodexplorer} install start..."
+    kod_version=$(echo ${kodexplorer} | grep -oE '[0-9]+\.[0-9]+')
+    kod_url1="https://github.com/kalcaddle/kodfile/archive/${kod_version}.tar.gz"
+    kod_url2="${download_root_url}/${kodexplorer}.tar.gz"
+    download_from_url "${kodexplorer}.tar.gz" "${kod_url1}" "${kod_url2}"
+    tar zxf ${kodexplorer}.tar.gz
+    mv ${kodexplorer} ${web_root_dir}/kod
+    chown -R apache:apache ${web_root_dir}/kod
+    log "Info" "${kodexplorer} install completed..."
+}
+
+
 install_ionCube(){
     local phpConfig=${1}
-    local php_version=`get_php_version "${phpConfig}"`
-    local php_extension_dir=`get_php_extension_dir "${phpConfig}"`
+    local php_version=$(get_php_version "${phpConfig}")
+    local php_extension_dir=$(get_php_extension_dir "${phpConfig}")
 
     cd ${cur_dir}/software/
 
     log "Info" "ionCube Loader install start..."
     if is_64bit; then
-        download_file  "${ionCube64_filename}.tar.gz"
+        download_file "${ionCube64_filename}.tar.gz"
         tar zxf ${ionCube64_filename}.tar.gz
         cp -pf ioncube/ioncube_loader_lin_${php_version}_ts.so ${php_extension_dir}/
     else
-        download_file  "${ionCube32_filename}.tar.gz"
+        download_file "${ionCube32_filename}.tar.gz"
         tar zxf ${ionCube32_filename}.tar.gz
         cp -pf ioncube/ioncube_loader_lin_${php_version}_ts.so ${php_extension_dir}/
     fi
@@ -374,8 +394,8 @@ EOF
 
 install_xcache(){
     local phpConfig=${1}
-    local php_version=`get_php_version "${phpConfig}"`
-    local php_extension_dir=`get_php_extension_dir "${phpConfig}"`
+    local php_version=$(get_php_version "${phpConfig}")
+    local php_extension_dir=$(get_php_extension_dir "${phpConfig}")
 
     log "Info" "XCache install start..."
     cd ${cur_dir}/software/
@@ -441,8 +461,8 @@ EOF
 
 install_php_libsodium(){
     local phpConfig=${1}
-    local php_version=`get_php_version "${phpConfig}"`
-    local php_extension_dir=`get_php_extension_dir "${phpConfig}"`
+    local php_version=$(get_php_version "${phpConfig}")
+    local php_extension_dir=$(get_php_extension_dir "${phpConfig}")
 
     cd ${cur_dir}/software/
 
@@ -477,8 +497,8 @@ EOF
 
 install_php_imagesmagick(){
     local phpConfig=${1}
-    local php_version=`get_php_version "${phpConfig}"`
-    local php_extension_dir=`get_php_extension_dir "${phpConfig}"`
+    local php_version=$(get_php_version "${phpConfig}")
+    local php_extension_dir=$(get_php_extension_dir "${phpConfig}")
 
     cd ${cur_dir}/software/
 
@@ -513,8 +533,8 @@ EOF
 
 install_php_graphicsmagick(){
     local phpConfig=${1}
-    local php_version=`get_php_version "${phpConfig}"`
-    local php_extension_dir=`get_php_extension_dir "${phpConfig}"`
+    local php_version=$(get_php_version "${phpConfig}")
+    local php_extension_dir=$(get_php_extension_dir "${phpConfig}")
 
     cd ${cur_dir}/software/
 
@@ -556,8 +576,8 @@ EOF
 
 install_php_memcached(){
     local phpConfig=${1}
-    local php_version=`get_php_version "${phpConfig}"`
-    local php_extension_dir=`get_php_extension_dir "${phpConfig}"`
+    local php_version=$(get_php_version "${phpConfig}")
+    local php_extension_dir=$(get_php_extension_dir "${phpConfig}")
 
     cd ${cur_dir}/software
 
@@ -568,12 +588,7 @@ install_php_memcached(){
     error_detect "./configure"
     error_detect "make"
     error_detect "make install"
-
-    if is_64bit; then
-        ln -s /usr/local/lib/libevent-2.0.so.5 /usr/lib64/
-    else
-        ln -s /usr/local/lib/libevent-2.0.so.5 /usr/lib/
-    fi
+    ldconfig
     log "Info" "libevent install completed..."
 
     cd ${cur_dir}/software
@@ -610,6 +625,7 @@ install_php_memcached(){
     fi
     download_file "${libmemcached_filename}.tar.gz"
     tar zxf ${libmemcached_filename}.tar.gz
+    patch -d ${libmemcached_filename} -p0 < ${cur_dir}/conf/libmemcached-build.patch
     cd ${libmemcached_filename}
     error_detect "./configure --with-memcached=${depends_prefix}/memcached --enable-sasl"
     error_detect "make"
@@ -647,12 +663,12 @@ EOF
 
 install_php_redis(){
     local phpConfig=${1}
-    local php_version=`get_php_version "${phpConfig}"`
-    local php_extension_dir=`get_php_extension_dir "${phpConfig}"`
+    local php_version=$(get_php_version "${phpConfig}")
+    local php_extension_dir=$(get_php_extension_dir "${phpConfig}")
     local redis_install_dir=${depends_prefix}/redis
     local tram=$( free -m | awk '/Mem/ {print $2}' )
     local swap=$( free -m | awk '/Swap/ {print $2}' )
-    local Mem=`expr $tram + $swap`
+    local Mem=$(expr $tram + $swap)
     local RT=0
 
     cd ${cur_dir}/software/
@@ -673,12 +689,17 @@ install_php_redis(){
         sed -i "s@logfile.*@logfile ${redis_install_dir}/var/redis.log@" ${redis_install_dir}/etc/redis.conf
         sed -i "s@^dir.*@dir ${redis_install_dir}/var@" ${redis_install_dir}/etc/redis.conf
         sed -i 's@daemonize no@daemonize yes@' ${redis_install_dir}/etc/redis.conf
+        sed -i "s@^# bind 127.0.0.1@bind 127.0.0.1@" ${redis_install_dir}/etc/redis.conf
         [ -z "`grep ^maxmemory ${redis_install_dir}/etc/redis.conf`" ] && sed -i "s@maxmemory <bytes>@maxmemory <bytes>\nmaxmemory `expr ${Mem} / 8`000000@" ${redis_install_dir}/etc/redis.conf
 
         if check_sys packageManager apt; then
             cp -f ${cur_dir}/conf/redis-server-init-debian /etc/init.d/redis-server
         elif check_sys packageManager yum; then
-            cp -f ${cur_dir}/conf/redis-server-init-centos /etc/init.d/redis-server
+            if echo $(get_opsy) | grep -Eqi "fedora"; then
+                cp -f ${cur_dir}/conf/redis-server-init-fedora /etc/init.d/redis-server
+            else
+                cp -f ${cur_dir}/conf/redis-server-init-centos /etc/init.d/redis-server
+            fi
         fi
 
         id -u redis >/dev/null 2>&1
@@ -724,8 +745,8 @@ EOF
 
 install_php_mongo(){
     local phpConfig=${1}
-    local php_version=`get_php_version "${phpConfig}"`
-    local php_extension_dir=`get_php_extension_dir "${phpConfig}"`
+    local php_version=$(get_php_version "${phpConfig}")
+    local php_extension_dir=$(get_php_extension_dir "${phpConfig}")
 
     cd ${cur_dir}/software/
 
@@ -751,8 +772,8 @@ EOF
 
 install_swoole(){
     local phpConfig=${1}
-    local php_version=`get_php_version "${phpConfig}"`
-    local php_extension_dir=`get_php_extension_dir "${phpConfig}"`
+    local php_version=$(get_php_version "${phpConfig}")
+    local php_extension_dir=$(get_php_extension_dir "${phpConfig}")
 
     cd ${cur_dir}/software/
 
@@ -778,15 +799,21 @@ EOF
 
 install_xdebug(){
     local phpConfig=${1}
-    local php_version=`get_php_version "${phpConfig}"`
-    local php_extension_dir=`get_php_extension_dir "${phpConfig}"`
+    local php_version=$(get_php_version "${phpConfig}")
+    local php_extension_dir=$(get_php_extension_dir "${phpConfig}")
 
     cd ${cur_dir}/software/
 
     log "Info" "xdebug install start..."
-    download_file "${xdebug_filename}.tgz"
-    tar zxf ${xdebug_filename}.tgz
-    cd ${xdebug_filename}
+    if [ "$php" == "${php5_6_filename}" ]; then
+        download_file "${xdebug_filename}.tgz"
+        tar zxf ${xdebug_filename}.tgz
+        cd ${xdebug_filename}
+    else
+        download_file "${xdebug_filename2}.tgz"
+        tar zxf ${xdebug_filename2}.tgz
+        cd ${xdebug_filename2}
+    fi
     error_detect "${php_location}/bin/phpize"
     error_detect "./configure --enable-xdebug --with-php-config=${phpConfig}"
     error_detect "make"

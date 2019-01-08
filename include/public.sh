@@ -1,4 +1,4 @@
-# Copyright (C) 2014 - 2018, Teddysun <i@teddysun.com>
+# Copyright (C) 2013 - 2019 Teddysun <i@teddysun.com>
 # 
 # This file is part of the LAMP script.
 #
@@ -305,8 +305,8 @@ check_ram(){
 
 #Check system
 check_sys(){
-    local checkType=${1}
-    local value=${2}
+    local checkType=$1
+    local value=$2
 
     local release=''
     local systemPackage=''
@@ -314,173 +314,40 @@ check_sys(){
     if [[ -f /etc/redhat-release ]]; then
         release="centos"
         systemPackage="yum"
-    elif cat /etc/issue | grep -Eqi "debian"; then
+    elif grep -Eqi "debian" /etc/issue; then
         release="debian"
         systemPackage="apt"
-    elif cat /etc/issue | grep -Eqi "ubuntu"; then
+    elif grep -Eqi "ubuntu" /etc/issue; then
         release="ubuntu"
         systemPackage="apt"
-    elif cat /etc/issue | grep -Eqi "centos|red hat|redhat"; then
+    elif grep -Eqi "centos|red hat|redhat" /etc/issue; then
         release="centos"
         systemPackage="yum"
-    elif cat /proc/version | grep -Eqi "debian"; then
+    elif grep -Eqi "debian" /proc/version; then
         release="debian"
         systemPackage="apt"
-    elif cat /proc/version | grep -Eqi "ubuntu"; then
+    elif grep -Eqi "ubuntu" /proc/version; then
         release="ubuntu"
         systemPackage="apt"
-    elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
+    elif grep -Eqi "centos|red hat|redhat" /proc/version; then
         release="centos"
         systemPackage="yum"
     fi
 
-    if [[ ${checkType} == "sysRelease" ]]; then
-        if [ "$value" == "$release" ]; then
+    if [[ "${checkType}" == "sysRelease" ]]; then
+        if [ "${value}" == "${release}" ]; then
             return 0
         else
             return 1
         fi
-    elif [[ ${checkType} == "packageManager" ]]; then
-        if [ "$value" == "$systemPackage" ]; then
+    elif [[ "${checkType}" == "packageManager" ]]; then
+        if [ "${value}" == "${systemPackage}" ]; then
             return 0
         else
             return 1
         fi
     fi
 }
-
-#create mysql cnf
-create_mysql_my_cnf(){
-
-    local mysqlDataLocation=${1}
-    local binlog=${2}
-    local replica=${3}
-    local my_cnf_location=${4}
-
-    local memory=512M
-    local storage=InnoDB
-    local totalMemory=$(awk 'NR==1{print $2}' /proc/meminfo)
-    if [[ ${totalMemory} -lt 393216 ]]; then
-        memory=256M
-        storage=MyISAM
-    elif [[ ${totalMemory} -lt 786432 ]]; then
-        memory=512M
-        storage=MyISAM
-    elif [[ ${totalMemory} -lt 1572864 ]]; then
-        memory=1G
-    elif [[ ${totalMemory} -lt 3145728 ]]; then
-        memory=2G
-    elif [[ ${totalMemory} -lt 6291456 ]]; then
-        memory=4G
-    elif [[ ${totalMemory} -lt 12582912 ]]; then
-        memory=8G
-    elif [[ ${totalMemory} -lt 25165824 ]]; then
-        memory=16G
-    else
-        memory=32G
-    fi
-
-    case ${memory} in
-        256M)innodb_log_file_size=32M;innodb_buffer_pool_size=64M;key_buffer_size=16M;open_files_limit=512;table_open_cache=200;max_connections=64;;
-        512M)innodb_log_file_size=32M;innodb_buffer_pool_size=128M;key_buffer_size=32M;open_files_limit=512;table_open_cache=200;max_connections=128;;
-        1G)innodb_log_file_size=64M;innodb_buffer_pool_size=256M;key_buffer_size=64M;open_files_limit=1024;table_open_cache=400;max_connections=256;;
-        2G)innodb_log_file_size=64M;innodb_buffer_pool_size=512M;key_buffer_size=128M;open_files_limit=1024;table_open_cache=400;max_connections=300;;
-        4G)innodb_log_file_size=128M;innodb_buffer_pool_size=1G;key_buffer_size=256M;open_files_limit=2048;table_open_cache=800;max_connections=400;;
-        8G)innodb_log_file_size=256M;innodb_buffer_pool_size=2G;key_buffer_size=512M;open_files_limit=4096;table_open_cache=1600;max_connections=400;;
-        16G)innodb_log_file_size=512M;innodb_buffer_pool_size=4G;key_buffer_size=1G;open_files_limit=8192;table_open_cache=2000;max_connections=512;;
-        32G)innodb_log_file_size=512M;innodb_buffer_pool_size=8G;key_buffer_size=2G;open_files_limit=65535;table_open_cache=2048;max_connections=1024;;
-        *) echo "input error, please input a number";;
-    esac
-
-    if ${binlog}; then
-        binlog="# BINARY LOGGING #\nlog-bin = ${mysqlDataLocation}/mysql-bin\nserver-id = 1\nexpire-logs-days = 14\nsync-binlog = 1"
-        binlog=$(echo -e $binlog)
-    else
-        binlog=""
-    fi
-
-    if ${replica}; then
-        replica="# REPLICATION #\nrelay-log = ${mysqlDataLocation}/relay-bin\nslave-net-timeout = 60"
-        replica=$(echo -e $replica)
-    else
-        replica=""
-    fi
-
-    if [ "$storage" == "InnoDB" ]; then
-        key_buffer_size=32M
-        if ! is_64bit && [[ `echo $innodb_buffer_pool_size | tr -d G` -ge 4 ]]; then
-            innodb_buffer_pool_size=2G
-        fi
-
-    elif [ "$storage" == "MyISAM" ]; then
-        innodb_log_file_size=32M
-        innodb_buffer_pool_size=8M
-        if ! is_64bit && [[ `echo $key_buffer_size | tr -d G` -ge 4 ]]; then
-            key_buffer_size=2G
-        fi
-    fi
-
-    log "Info" "create my.cnf file..."
-    sleep 1
-    cat >${my_cnf_location} <<EOF
-[mysql]
-
-# CLIENT #
-port                           = 3306
-socket                         = /tmp/mysql.sock
-
-[mysqld]
-
-# GENERAL #
-port                           = 3306
-user                           = mysql
-default-storage-engine         = ${storage}
-socket                         = /tmp/mysql.sock
-pid-file                       = ${mysqlDataLocation}/mysql.pid
-skip-name-resolve
-skip-external-locking
-
-# MyISAM #
-key-buffer-size                = ${key_buffer_size}
-
-# INNODB #
-innodb-log-files-in-group      = 2
-innodb-log-file-size           = ${innodb_log_file_size}
-innodb-flush-log-at-trx-commit = 2
-innodb-file-per-table          = 1
-innodb-buffer-pool-size        = ${innodb_buffer_pool_size}
-
-# CACHES AND LIMITS #
-tmp-table-size                 = 32M
-max-heap-table-size            = 32M
-query-cache-type               = 0
-query-cache-size               = 0
-max-connections                = ${max_connections}
-thread-cache-size              = 50
-open-files-limit               = ${open_files_limit}
-table-open-cache               = ${table_open_cache}
-
-
-# SAFETY #
-max-allowed-packet             = 16M
-max-connect-errors             = 1000000
-
-# DATA STORAGE #
-datadir                        = ${mysqlDataLocation}
-
-# LOGGING #
-log-error                      = ${mysqlDataLocation}/mysql-error.log
-
-${binlog}
-
-${replica}
-
-EOF
-
-    log "Info" "create my.cnf file at ${my_cnf_location} completed."
-
-}
-
 
 create_lib_link(){
     local lib=${1}
@@ -662,6 +529,15 @@ centosversion(){
     fi
 }
 
+get_centosversion(){
+    if check_sys sysRelease centos; then
+        local version="$(versionget)"
+        echo ${version%%.*}
+    else
+        echo ""
+    fi
+}
+
 debianversion(){
     if check_sys sysRelease debian; then
         local version=$( get_opsy )
@@ -677,6 +553,16 @@ debianversion(){
     fi
 }
 
+get_debianversion(){
+    if check_sys sysRelease debian; then
+        local version=$( get_opsy )
+        local main_ver=$( echo ${version} | grep -oE  "[0-9.]+")
+        echo ${main_ver%%.*}
+    else
+        echo ""
+    fi
+}
+
 ubuntuversion(){
     if check_sys sysRelease ubuntu; then
         local version=$( get_opsy )
@@ -689,6 +575,16 @@ ubuntuversion(){
         fi
     else
         return 1
+    fi
+}
+
+get_ubuntuversion(){
+    if check_sys sysRelease ubuntu; then
+        local version=$( get_opsy )
+        local main_ver=$( echo ${version} | grep -oE  "[0-9.]+")
+        echo ${main_ver%%.*}
+    else
+        echo ""
     fi
 }
 
@@ -721,7 +617,7 @@ boot_stop(){
         update-rc.d -f ${1} remove
     elif check_sys packageManager yum; then
         chkconfig ${1} off
-        chkconfig --remove ${1}
+        chkconfig --del ${1}
     fi
 }
 
@@ -762,13 +658,13 @@ download_from_url(){
         log "Info" "${filename} [found]"
     else
         log "Info" "${filename} not found, download now..."
-        wget -cv -t3 -T3 ${2}
+        wget --no-check-certificate -cv -t3 -T60 -O ${filename} ${2}
         if [ $? -eq 0 ]; then
             log "Info" "${filename} download completed..."
         else
             rm -f ${filename}
             log "Info" "${filename} download failed, retrying download from backup site..."
-            wget -cv -t3 -T60 ${3}
+            wget --no-check-certificate -cv -t3 -T60 -O ${filename} ${3}
             if [ $? -eq 0 ]; then
                 log "Info" "${filename} download completed..."
             else
@@ -839,11 +735,12 @@ firewall_set(){
         else
             log "Warning" "iptables looks like not installed."
         fi
-    elif centosversion 7; then
+    else
         systemctl status firewalld > /dev/null 2>&1
         if [ $? -eq 0 ]; then
-            firewall-cmd --permanent --zone=public --add-service=http > /dev/null 2>&1
-            firewall-cmd --permanent --zone=public --add-service=https > /dev/null 2>&1
+            default_zone=$(firewall-cmd --get-default-zone)
+            firewall-cmd --permanent --zone=${default_zone} --add-service=http > /dev/null 2>&1
+            firewall-cmd --permanent --zone=${default_zone} --add-service=https > /dev/null 2>&1
             firewall-cmd --reload > /dev/null 2>&1
         else
             log "Warning" "firewalld looks like not running, please manually set if necessary."
@@ -861,25 +758,22 @@ remove_packages(){
     elif check_sys packageManager yum; then
         yum -y remove httpd-* &> /dev/null
         yum -y remove mysql-* &> /dev/null
-        yum -y remove php-* &> /dev/null
+        yum -y remove php-* libzip-devel libzip &> /dev/null
     fi
     log "Info" "Remove the conflict packages completed..."
 }
 
 sync_time(){
     log "Info" "Starting to sync time..."
-    if check_sys packageManager apt; then
-        apt-get -y update > /dev/null 2>&1
-        apt-get -y install ntpdate > /dev/null 2>&1
-    elif check_sys packageManager yum; then
-        yum -y install ntp > /dev/null 2>&1
-    fi
-    check_command_exist ntpdate
-    ntpdate -d cn.pool.ntp.org > /dev/null 2>&1
+    ntpdate -bv cn.pool.ntp.org
     rm -f /etc/localtime
     ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-    hwclock -w > /dev/null 2>&1
     log "Info" "Sync time completed..."
+
+    StartDate=$(date "+%Y-%m-%d %H:%M:%S")
+    StartDateSecond=$(date +%s)
+    log "Info" "Start time: ${StartDate}"
+
 }
 
 #Last confirm
@@ -890,7 +784,6 @@ last_confirm(){
     echo
     echo "Apache: ${apache}"
     [ "${apache}" != "do_not_install" ] && echo "Apache Location: ${apache_location}"
-    echo
     if [ "${apache_modules_install}" != "do_not_install" ]; then
         echo "Apache Additional Modules:"
         for a in ${apache_modules_install[@]}
@@ -929,18 +822,15 @@ last_confirm(){
     echo "phpMyAdmin: ${phpmyadmin}"
     [ "${phpmyadmin}" != "do_not_install" ] && echo "phpMyAdmin Location: ${web_root_dir}/phpmyadmin"
     echo
+    echo "KodExplorer: ${kodexplorer}"
+    [ "${kodexplorer}" != "do_not_install" ] && echo "KodExplorer Location: ${web_root_dir}/kod"
+    echo
     echo "---------------------------------------------------------------------"
     echo
 
     echo "Press any key to start...or Press Ctrl+C to cancel"
     echo
     char=`get_char`
-
-    sync_time
-
-    StartDate=$(date "+%Y-%m-%d %H:%M:%S")
-    StartDateSecond=$(date +%s)
-    log "Info" "Start time: ${StartDate}"
 
     if [ ! -d ${cur_dir}/software ]; then
         mkdir -p ${cur_dir}/software
@@ -949,7 +839,7 @@ last_confirm(){
 }
 
 #Finally to do
-finally(){
+install_finally(){
     log "Info" "Starting clean up..."
     cd ${cur_dir}
     rm -rf ${cur_dir}/software
@@ -964,9 +854,9 @@ finally(){
     echo
     echo "------------------------ Installed Overview -------------------------"
     echo
-    echo "Default Website: http://$(get_ip)"
     echo "Apache: ${apache}"
     if [ "${apache}" != "do_not_install" ]; then
+        echo "Default Website: http://$(get_ip)"
         echo "Apache Location: ${apache_location}"
     fi
     echo
@@ -1002,6 +892,9 @@ finally(){
     echo "phpMyAdmin: ${phpmyadmin}"
     [ "${phpmyadmin}" != "do_not_install" ] && echo "phpMyAdmin Location: ${web_root_dir}/phpmyadmin"
     echo
+    echo "KodExplorer: ${kodexplorer}"
+    [ "${kodexplorer}" != "do_not_install" ] && echo "KodExplorer Location: ${web_root_dir}/kod"
+    echo
     echo "---------------------------------------------------------------------"
     echo
 
@@ -1020,6 +913,15 @@ finally(){
         cat >> ${apache_location}/conf/httpd.conf <<EOF
 <IfModule alias_module>
     Alias /phpmyadmin ${web_root_dir}/phpmyadmin
+</IfModule>
+EOF
+    fi
+
+    # Add kodexplorer Alias
+    if [ -d "${web_root_dir}/kod" ]; then
+        cat >> ${apache_location}/conf/httpd.conf <<EOF
+<IfModule alias_module>
+    Alias /kod ${web_root_dir}/kod
 </IfModule>
 EOF
     fi
@@ -1061,14 +963,24 @@ EOF
 }
 
 #Install tools
-install_tool(){
+install_tools(){
     log "Info" "Starting to install development tools..."
     if check_sys packageManager apt; then
         apt-get -y update > /dev/null 2>&1
-        apt-get -y install gcc g++ make wget perl curl bzip2 libreadline-dev net-tools python python-dev cron ca-certificates > /dev/null 2>&1
+        apt_tools=(gcc g++ make wget perl curl bzip2 libreadline-dev net-tools python python-dev cron ca-certificates ntpdate)
+        for tool in ${apt_tools[@]}; do
+            error_detect_depends "apt-get -y install ${tool}"
+        done
     elif check_sys packageManager yum; then
-        yum install -y yum-utils epel-release gcc gcc-c++ make wget perl curl bzip2 readline readline-devel net-tools python python-devel crontabs ca-certificates > /dev/null 2>&1
-        yum-config-manager --enable epel > /dev/null 2>&1
+        yum makecache > /dev/null 2>&1
+        yum_tools=(yum-utils gcc gcc-c++ make wget perl curl bzip2 readline readline-devel net-tools python python-devel crontabs ca-certificates ntpdate)
+        for tool in ${yum_tools[@]}; do
+            error_detect_depends "yum -y install ${tool}"
+        done
+        if centosversion 6 || centosversion 7; then
+            error_detect_depends "yum -y install epel-release"
+            yum-config-manager --enable epel > /dev/null 2>&1
+        fi
     fi
     log "Info" "Install development tools completed..."
 
@@ -1078,13 +990,15 @@ install_tool(){
     check_command_exist "wget"
     check_command_exist "perl"
     check_command_exist "netstat"
+    check_command_exist "ntpdate"
 }
 
 #start install lamp
-install_lamp(){
+lamp_install(){
     last_confirm
     disable_selinux
-    install_tool
+    install_tools
+    sync_time
     remove_packages
 
     [ "${apache}" != "do_not_install" ] && check_installed "install_apache" "${apache_location}"
@@ -1098,13 +1012,14 @@ install_lamp(){
     fi
     [ "${php}" != "do_not_install" ] && check_installed "install_php" "${php_location}"
     [ "${phpmyadmin}" != "do_not_install" ] && install_phpmyadmin
+    [ "${kodexplorer}" != "do_not_install" ] && install_kodexplorer
     [ "${php_modules_install}" != "do_not_install" ] && install_php_modules "${phpConfig}"
 
-    finally
+    install_finally
 }
 
 #Pre-installation
-preinstall_lamp(){
+lamp_preinstall(){
     check_ram
     display_os_info
     apache_preinstall_settings
@@ -1112,20 +1027,30 @@ preinstall_lamp(){
     php_preinstall_settings
     php_modules_preinstall_settings
     phpmyadmin_preinstall_settings
+    kodexplorer_preinstall_settings
 }
 
 #Pre-installation settings
 pre_setting(){
+    is_support_flg=0
     if check_sys packageManager yum || check_sys packageManager apt; then
-        # Not support CentOS 5 & Debian 6
-        if centosversion 5 || debianversion 6; then
-            log "Error" "Not supported OS, please change to CentOS 6+ or Debian 7+ or Ubuntu 14+ and try again."
-            exit 1
+        # Not support CentOS prior to 6 & Debian prior to 8 & Ubuntu prior to 14 versions
+        if [ -n "$(get_centosversion)" ] && [ $(get_centosversion) -lt 6 ]; then
+            is_support_flg=1
         fi
-        preinstall_lamp
-        install_lamp
+        if [ -n "$(get_debianversion)" ] && [ $(get_debianversion) -lt 8 ]; then
+            is_support_flg=1
+        fi
+        if [ -n "$(get_ubuntuversion)" ] && [ $(get_ubuntuversion) -lt 14 ]; then
+            is_support_flg=1
+        fi
     else
-        log "Error" "Not supported OS, please change to CentOS 6+ or Debian 7+ or Ubuntu 14+ and try again."
+        is_support_flg=1
+    fi
+    if [ ${is_support_flg} -eq 1 ]; then
+        log "Error" "Not supported OS, please change OS to CentOS 6+ or Debian 8+ or Ubuntu 14+ and try again."
         exit 1
     fi
+    lamp_preinstall
+    lamp_install
 }

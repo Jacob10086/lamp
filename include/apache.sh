@@ -1,4 +1,4 @@
-# Copyright (C) 2014 - 2018, Teddysun <i@teddysun.com>
+# Copyright (C) 2013 - 2019 Teddysun <i@teddysun.com>
 # 
 # This file is part of the LAMP script.
 #
@@ -33,7 +33,7 @@ apache_preinstall_settings(){
 install_apache(){
 
     log "Info" "Starting to install dependencies packages for Apache..."
-    local apt_list=(openssl libssl-dev libxml2-dev lynx lua-expat-dev libjansson-dev)
+    local apt_list=(zlib1g-dev openssl libssl-dev libxml2-dev lynx lua-expat-dev libjansson-dev)
     local yum_list=(zlib-devel openssl-devel libxml2-devel lynx expat-devel lua-devel lua jansson-devel)
     if check_sys packageManager apt; then
         for depend in ${apt_list[@]}; do
@@ -67,7 +67,7 @@ install_apache(){
 
     LDFLAGS=-ldl
     if [ -d ${openssl_location} ]; then
-        apache_configure_args=`echo ${apache_configure_args} | sed -e "s@--with-ssl@--with-ssl=${openssl_location}@"`
+        apache_configure_args=$(echo ${apache_configure_args} | sed -e "s@--with-ssl@--with-ssl=${openssl_location}@")
     fi
     error_detect "./configure ${apache_configure_args}"
     error_detect "parallel_make"
@@ -88,13 +88,12 @@ config_apache(){
         cp -f ${apache_location}/conf/httpd.conf ${apache_location}/conf/httpd.conf.bak
     fi
 
-    grep -E -q "^\s*#\s*Include conf/extra/httpd-vhosts.conf" ${apache_location}/conf/httpd.conf && \
+    grep -qE "^\s*#\s*Include conf/extra/httpd-vhosts.conf" ${apache_location}/conf/httpd.conf && \
     sed -i 's#^\s*\#\s*Include conf/extra/httpd-vhosts.conf#Include conf/extra/httpd-vhosts.conf#' ${apache_location}/conf/httpd.conf || \
     sed -i '$aInclude conf/extra/httpd-vhosts.conf' ${apache_location}/conf/httpd.conf
 
     mv ${apache_location}/conf/extra/httpd-vhosts.conf ${apache_location}/conf/extra/httpd-vhosts.conf.bak
     mkdir -p ${apache_location}/conf/vhost/
-    touch ${apache_location}/conf/vhost/none.conf
 
     cat > /etc/logrotate.d/httpd <<EOF
 ${apache_location}/logs/access_log ${apache_location}/logs/error_log {
@@ -112,9 +111,11 @@ EOF
 
     cat > ${apache_location}/conf/extra/httpd-vhosts.conf <<EOF
 Include ${apache_location}/conf/vhost/*.conf
-<VirtualHost *:80>
+EOF
+
+    cat > ${apache_location}/conf/vhost/default.conf <<EOF
+<VirtualHost _default_:80>
 ServerName localhost
-ServerAlias localhost
 DocumentRoot ${web_root_dir}
 <Directory ${web_root_dir}>
     SetOutputFilter DEFLATE
@@ -223,7 +224,7 @@ EOF
 
     cp -f ${cur_dir}/conf/index.html ${web_root_dir}
     cp -f ${cur_dir}/conf/index_cn.html ${web_root_dir}
-    cp -f ${cur_dir}/conf/lamp.gif ${web_root_dir}
+    cp -f ${cur_dir}/conf/lamp.png ${web_root_dir}
     cp -f ${cur_dir}/conf/jquery.js ${web_root_dir}
     cp -f ${cur_dir}/conf/p.php ${web_root_dir}
     cp -f ${cur_dir}/conf/p_cn.php ${web_root_dir}
